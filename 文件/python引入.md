@@ -13,7 +13,7 @@
 ### 一切的开始
 ```
 print("Hello World")
-````
+```
 ### 基本数据类型与运算
 **赋值与类型**
 
@@ -142,6 +142,102 @@ def add(a: int, b: int) -> int:
 
 ----
 
+## bytes 与编码（CTF 最高频知识点）
+
+**重要**：Python 3 里字符串 `str` 和字节 `bytes` 是两种东西。网络收发的、文件里存的、题目给的 flag，大多是 **bytes**。
+
+```python
+s = "flag{hello}"          # str（文本）
+b = b"flag{hello}"         # bytes（字节），前面加 b
+print(s.encode())          # str -> bytes：b'flag{hello}'
+print(b.decode())          # bytes -> str：'flag{hello}'
+
+# 十六进制（Misc 里满大街都是）
+hex_str = "666c61677b68656c6c6f7d"
+print(bytes.fromhex(hex_str))          # b'flag{hello}'
+print(b"flag".hex())                  # '666c6167'
+
+# Base64
+import base64
+print(base64.b64encode(b"flag"))       # b'ZmxhZw=='
+print(base64.b64decode("ZmxhZw=="))   # b'flag'
+```
+
+> 报 `TypeError: can't concat str to bytes` 时，就是 str/bytes 混用了——统一用 `encode()` 或 `decode()` 转一下。
+
+## 文件读写
+
+解 Misc 题经常要处理文件：
+
+```python
+# 读文本
+with open("data.txt", "r", encoding="utf-8") as f:
+    content = f.read()          # 全读成字符串
+
+# 读二进制（图片、压缩包、加密文件）
+with open("secret.bin", "rb") as f:
+    data = f.read()             # 全读成 bytes
+
+# 写文件
+with open("out.txt", "w") as f:
+    f.write(content)
+```
+
+`with open(...) as f:` 会自动关闭文件，永远用这个写法。
+
+## 异或 XOR（密码学/逆向常客）
+
+XOR 的特性：`a ^ b = c`，则 `a ^ c = b`。加密和解密是同一个操作，所以 CTF 里最常见的解密脚本就是循环异或：
+
+```python
+data = bytes.fromhex("1b1c1b1a1e")      # 假设这是密文
+key = 0x66                              # 单字节密钥
+
+flag = bytes([c ^ key for c in data])   # 逐字节异或
+print(flag)
+
+# 多字节密钥循环异或
+def xor_with_key(data: bytes, key: bytes):
+    return bytes([d ^ key[i % len(key)] for i, d in enumerate(data)])
+```
+
+> 看到"异或加密""XOR"字样，先试单字节爆破（key 从 0 到 255 全试一遍，看哪个输出像 flag）。
+
+## 正则表达式（提取 flag 神器）
+
+解 Web/Misc 题，从一堆输出里抓 flag 全靠它：
+
+```python
+import re
+
+text = "random...flag{Th1s_1s_fl4g}...random"
+m = re.search(r"flag\{[^}]+\}", text)   # 匹配 flag{...}
+print(m.group(0))                       # flag{Th1s_1s_fl4g}
+
+# 找所有数字
+print(re.findall(r"\d+", "a1b22c333"))  # ['1', '22', '333']
+```
+
+## 列表推导式与常用内置函数
+
+```python
+# 列表推导式：一行生成列表（比 for 循环简洁）
+squares = [x * x for x in range(5)]     # [0, 1, 4, 9, 16]
+evens   = [x for x in range(10) if x % 2 == 0]
+
+# 常用内置函数
+for i, v in enumerate(["a", "b", "c"]):  # 同时拿下标和值
+    print(i, v)
+
+names = ["bob", "alice", "cindy"]
+print(sorted(names))                     # 排序
+print("".join(reversed("abc")))          # 反转字符串
+
+# 字符 <-> ASCII（密码题常用）
+print(ord("A"))                          # 65
+print(chr(97))                           # 'a'
+```
+
 ### 依赖管理
 
 Python 拥有丰富的第三方库。
@@ -157,6 +253,22 @@ pip install requests
 pip install -r requirements.txt
 ```
 ----
+
+## 补充：虚拟环境 venv 与 pip 换源
+
+装多了库容易互相打架（版本冲突），用虚拟环境隔离：
+
+```powershell
+python -m venv myenv      # 创建虚拟环境
+.\myenv\Scripts\activate  # 激活（Windows）
+# Linux/WSL: source myenv/bin/activate
+```
+
+国内下载慢，换清华源：
+
+```powershell
+pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+```
 
 # requests & flask
 
@@ -187,4 +299,27 @@ def index():
 if __name__ == "__main__":
     app.run()
 ```
-[^1]: 本文来自moectf  `3-2 Python环境配置与基础语法`
+
+> 报错永远从**最下面一行**（异常类型和位置）读起，`Traceback` 的最后一帧才是出错点。
+
+## 补充：CTF 解题脚本模板
+
+把下面这份存成 `solve.py`，以后解脚本题直接改：
+
+```python
+import requests, re, base64
+
+# 1. 拿题目数据（Web 题）
+resp = requests.get("http://target/flag.txt")
+data = resp.text
+
+# 2. 处理（解码/异或/正则）
+flag = re.search(r"flag\{[^}]+\}", data).group(0)
+
+# 3. 提交或打印
+print(flag)
+```
+
+进阶玩法：`requests` + 循环 = 自动提交/爆破；`pwntools` + `nc` = 打 Pwn 题；`z3` = 解约束方程。
+
+[^1]: 本文来自moectf  `3-2 Python环境配置与基础语法`（原版基础上补充了 bytes/编码、文件读写、异或、正则、调试与实战模板）
